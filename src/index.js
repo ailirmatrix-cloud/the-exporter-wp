@@ -51,6 +51,33 @@ function plainErrorMessage( text ) {
 	return text;
 }
 
+function formatPushCurrentFile( currentFile ) {
+	if ( ! currentFile ) {
+		return '';
+	}
+	if ( typeof currentFile === 'string' ) {
+		return currentFile;
+	}
+	if ( typeof currentFile === 'object' && currentFile.path ) {
+		return currentFile.path;
+	}
+	return '';
+}
+
+function formatStallLikely( diag ) {
+	if ( ! diag || ! diag.likely ) {
+		return '';
+	}
+	const map = {
+		export_send_tab_not_driving: 'Export Send tab is not pushing (keep it open in the foreground).',
+		export_send_tab_closed_or_never_started: 'Export Send was never started or the tab was closed.',
+		export_push_failed: 'Export push reported an error.',
+		export_stuck_on_current_file: 'Export reports active but no files are completing — likely stuck on the current file. Keep Send open; check export site for errors.',
+		stuck_mid_chunk: 'A large file chunk started but did not complete.',
+	};
+	return map[ diag.likely ] || diag.likely;
+}
+
 function getConfig() {
 	return window.teMigrate || window.teAdmin || {};
 }
@@ -138,7 +165,8 @@ function StatusBox( { type, children } ) {
 const TRANSFER_POLL_MS = 2000;
 const TRANSFER_POLL_GAP_MS = 2000;
 const EXPORT_POLL_MS = ( typeof window !== 'undefined' && /localhost|127\.0\.0\.1/i.test( window.location?.hostname || '' ) ) ? 800 : 2000;
-const TRANSFER_NUDGE_MS = ( typeof window !== 'undefined' && /localhost|127\.0\.0\.1/i.test( window.location?.hostname || '' ) ) ? 10000 : 60000;
+const TRANSFER_NUDGE_MS = ( typeof window !== 'undefined' && /localhost|127\.0\.0\.1/i.test( window.location?.hostname || '' ) ) ? 10000 : 20000;
+const TRANSFER_NUDGE_HIDDEN_MS = 10000;
 
 function formatBytes( bytes ) {
 	const n = Number( bytes ) || 0;
@@ -455,7 +483,12 @@ function ExportConnectStep( { onConnected, api } ) {
 		setBusy( false );
 		if ( res.ok && res.data?.success ) {
 			setOk( true );
-			setMsg( ( res.data.message || 'Connected.' ) + ( res.data.push_url && res.data.push_url !== url ? ` Server push URL: ${ res.data.push_url }` : '' ) );
+			const peerPost = res.data.php_limits?.post_max_size || 0;
+			let message = ( res.data.message || 'Connected.' ) + ( res.data.push_url && res.data.push_url !== url ? ` Server push URL: ${ res.data.push_url }` : '' );
+			if ( peerPost > 0 && peerPost < 12582912 ) {
+				message += ' Warning: import host PHP upload limit is very low — connected transfer may stall on large files.';
+			}
+			setMsg( message );
 			onConnected();
 		} else {
 			setOk( false );
@@ -684,8 +717,15 @@ function ExportTransferStep( { api, migrationId, onDone } ) {
 	const [ progress, setProgress ] = useState( null );
 	const [ pulseKey, setPulseKey ] = useState( 0 );
 	const [ polling, setPolling ] = useState( false );
+	const [ tabHidden, setTabHidden ] = useState( false );
 	const started = useRef( false );
 	const lastSent = useRef( 0 );
+
+	useEffect( () => {
+		const onVisibility = () => setTabHidden( document.hidden );
+		document.addEventListener( 'visibilitychange', onVisibility );
+		return () => document.removeEventListener( 'visibilitychange', onVisibility );
+	}, [] );
 
 	const handleProgress = useCallback( ( d ) => {
 		if ( ! d ) {
@@ -735,14 +775,15 @@ function ExportTransferStep( { api, migrationId, onDone } ) {
 		if ( ! polling || pushDone || ! migrationId ) {
 			return undefined;
 		}
+		const nudgeMs = tabHidden ? TRANSFER_NUDGE_HIDDEN_MS : TRANSFER_NUDGE_MS;
 		const nudge = setInterval( async () => {
 			await api.call( 'transfer/drive', {
 				method: 'POST',
 				body: { migration_id: migrationId },
 			} );
-		}, TRANSFER_NUDGE_MS );
+		}, nudgeMs );
 		return () => clearInterval( nudge );
-	}, [ api, migrationId, polling, pushDone ] );
+	}, [ api, migrationId, polling, pushDone, tabHidden ] );
 
 	const beginPush = useCallback( async () => {
 		if ( ! migrationId ) {
@@ -796,6 +837,16 @@ function ExportTransferStep( { api, migrationId, onDone } ) {
 		<Card className="te-glass-card te-migrate__card">
 			<CardHeader><h2>{ window.teMigrate?.strings?.transferTitle || 'Send to import site' }</h2></CardHeader>
 			<CardBody>
+				<Notice status="warning" isDismissible={ false } className="te-migrate__notice">
+					{ window.teMigrate?.strings?.keepTabOpen ||
+						'Keep this browser tab open and in the foreground while sending. Closing or backgrounding it will pause the transfer.' }
+				</Notice>
+				{ tabHidden && (
+					<Notice status="warning" isDismissible={ false } className="te-migrate__notice">
+						{ window.teMigrate?.strings?.tabBackgrounded ||
+							'This tab is in the background — transfer may be throttled. Bring it to the front.' }
+					</Notice>
+				) }
 				{ isAuto && (
 					<Notice status="info" isDismissible={ false }>
 						{ window.teMigrate?.strings?.autoPushOn ||
@@ -914,6 +965,9 @@ function ImportReceiveStep( { api, migrationId, setMigrationId, onReady } ) {
 		if ( res.ok && res.data ) {
 			const d = res.data;
 			setProgress( d );
+			// #region agent log
+			fetch( 'http://127.0.0.1:7645/ingest/2f3eba9c-d9e1-42a2-87c1-0349faa0f8ee', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '303160' }, body: JSON.stringify( { sessionId: '303160', location: 'index.js:ImportReceiveStep.check', message: 'receive_progress', hypothesisId: 'H1-H5', timestamp: Date.now(), data: { stale: d.stale, stall_diag: d.stall_diag, push_sent: d.push_state?.sent, push_active: d.push_state?.active, worker_last_at: d.push_state?.worker_last_at, inflight_path: d.inflight?.path } } ) } ).catch( () => {} );
+			// #endregion
 			const uploaded = d.upload?.uploaded || 0;
 			const expected = d.upload?.expected || 0;
 			if ( uploaded > lastUploaded.current ) {
@@ -976,7 +1030,9 @@ function ImportReceiveStep( { api, migrationId, setMigrationId, onReady } ) {
 		: 0;
 	const postMax = progress?.php_limits?.post_max_size || 0;
 	const phpLimitLow = postMax > 0 && postMax < 12582912;
-	const pushError = progress?.push_state?.error && progress?.stale;
+	const pushState = progress?.push_state;
+	const pushError = pushState?.error;
+	const pushInfo = pushState && ( pushState.retrying || pushState.current_file || ( pushState.sent != null && pushState.total ) );
 
 	return (
 		<Card className="te-glass-card te-migrate__card">
@@ -994,7 +1050,21 @@ function ImportReceiveStep( { api, migrationId, setMigrationId, onReady } ) {
 				) }
 				{ pushError && (
 					<Notice status="error" isDismissible={ false } className="te-migrate__notice">
-						{ progress.push_state.error }
+						{ pushState.error }
+					</Notice>
+				) }
+				{ pushInfo && ! pushError && (
+					<Notice status="info" isDismissible={ false } className="te-migrate__notice">
+						{ pushState.retrying ? ( window.teMigrate?.strings?.exportRetrying || 'Export is retrying…' ) + ' ' : '' }
+						{ pushState.sent != null && pushState.total ? `${ pushState.sent } / ${ pushState.total } files from export` : ( pushState.sent != null ? `${ pushState.sent } files sent from export` : '' ) }
+						{ formatPushCurrentFile( pushState.current_file ) ? ` — ${ formatPushCurrentFile( pushState.current_file ) }` : '' }
+					</Notice>
+				) }
+				{ progress?.stale && progress?.stall_diag && (
+					<Notice status="warning" isDismissible={ false } className="te-migrate__notice">
+						<strong>{ formatStallLikely( progress.stall_diag ) }</strong>
+						{ progress.stall_diag.inflight_path ? ` Partial file: ${ progress.stall_diag.inflight_path }.` : '' }
+						{ progress.stall_diag.last_received_age_s != null ? ` Last completed file: ${ progress.stall_diag.last_received_age_s }s ago.` : '' }
 					</Notice>
 				) }
 				<TextControl

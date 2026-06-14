@@ -82,6 +82,44 @@ te_chunk_assert( 'peer_post_max_caps_chunk_size', $capped <= 8388608 );
 $auth_src = file_get_contents( TE_PLUGIN_DIR . 'includes/transfer/class-remote-auth.php' );
 te_chunk_assert( 'remote_auth_imports_settings', false !== strpos( $auth_src, 'use TheExporter\Settings;' ) );
 
+\TheExporter\Transfer\TransferProgress::set_import_push_state( $fake_id, array(
+	'worker_last_at' => '2020-01-01T00:00:00+00:00',
+	'active'         => true,
+) );
+\TheExporter\Transfer\TransferProgress::set_import_push_state( $fake_id, array( 'sent' => 5 ) );
+$merged = \TheExporter\Transfer\TransferProgress::get_import_push_state( $fake_id );
+te_chunk_assert(
+	'push_state_merge_preserves_heartbeat',
+	is_array( $merged )
+		&& ! empty( $merged['worker_last_at'] )
+		&& 5 === (int) ( $merged['sent'] ?? 0 )
+);
+
+$drive_sec = \TheExporter\Settings::transfer_drive_seconds();
+te_chunk_assert( 'transfer_drive_seconds_sane', $drive_sec >= 10 && $drive_sec <= 120 );
+
+$receive_early = array( 'expected' => 10, 'uploaded' => 0, 'needs_manifest' => false, 'ready' => false );
+te_chunk_assert(
+	'stale_before_first_file',
+	\TheExporter\Transfer\MigrationState::receive_is_stale( $fake_id, $receive_early, null, null, null )
+);
+
+te_chunk_assert(
+	'is_transient_push_error',
+	\TheExporter\Transfer\RemotePusher::is_transient_push_error( 'Connection timed out after 90 seconds' )
+);
+
+te_chunk_assert(
+	'stale_despite_active_push',
+	\TheExporter\Transfer\MigrationState::receive_is_stale(
+		$fake_id,
+		array( 'expected' => 100, 'uploaded' => 80, 'needs_manifest' => false, 'ready' => false ),
+		gmdate( 'c', time() - 120 ),
+		null,
+		array( 'active' => true, 'worker_active' => true, 'worker_last_at' => gmdate( 'c' ) )
+	)
+);
+
 \TheExporter\Transfer\TransferRepair::purge_partial_file( $fake_id, $path );
 te_chunk_assert( 'purge_partial_callable', true );
 

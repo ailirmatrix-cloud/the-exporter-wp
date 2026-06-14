@@ -412,6 +412,20 @@ class Settings {
 	}
 
 	/**
+	 * Browser nudge time budget for connected transfer (seconds).
+	 *
+	 * @return int
+	 */
+	public static function transfer_drive_seconds() {
+		$base = self::is_localhost_studio() ? 25 : 60;
+		$max  = (int) ini_get( 'max_execution_time' );
+		if ( $max > 0 && $max < 120 ) {
+			return max( 10, $max - 5 );
+		}
+		return $base;
+	}
+
+	/**
 	 * Host-visible export package path for local copy (import site).
 	 *
 	 * @param string $migration_id Migration ID.

@@ -83,18 +83,50 @@ class TransferWorker {
 		if ( '' === $migration_id ) {
 			return;
 		}
+		$loopback_ok = self::probe_loopback();
 		self::schedule_recurring( $migration_id );
 		self::touch_meta(
 			$migration_id,
 			array(
-				'active'     => true,
-				'started_at' => gmdate( 'c' ),
-				'source'     => 'ensure',
+				'active'          => true,
+				'started_at'      => gmdate( 'c' ),
+				'source'          => 'ensure',
+				'loopback_ok'     => $loopback_ok,
+				'loopback_probed' => gmdate( 'c' ),
 			)
 		);
 		self::schedule_once( $migration_id, 1 );
-		self::chain_loopback( $migration_id );
-		self::chain_loopback( $migration_id );
+		if ( $loopback_ok ) {
+			self::chain_loopback( $migration_id );
+			self::chain_loopback( $migration_id );
+		}
+	}
+
+	/**
+	 * Whether loopback worker-tick is reachable from this host.
+	 *
+	 * @return bool
+	 */
+	public static function probe_loopback() {
+		$url = rest_url( 'the-exporter/v1/transfer/worker-tick' );
+		$response = wp_remote_post(
+			$url,
+			array(
+				'timeout'   => 3,
+				'blocking'  => true,
+				'headers'   => array(
+					'Content-Type'      => 'application/json',
+					'X-TE-Worker-Token' => self::get_token(),
+				),
+				'body'      => wp_json_encode( array( 'migration_id' => 'probe' ) ),
+				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return false;
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		return $code >= 200 && $code < 500;
 	}
 
 	/**

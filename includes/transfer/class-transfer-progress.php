@@ -211,8 +211,9 @@ class TransferProgress {
 		if ( ! is_array( $all ) ) {
 			$all = array();
 		}
+		$prev = isset( $all[ $migration_id ] ) && is_array( $all[ $migration_id ] ) ? $all[ $migration_id ] : array();
 		$state['updated_at'] = gmdate( 'c' );
-		$all[ $migration_id ] = $state;
+		$all[ $migration_id ] = array_merge( $prev, $state );
 		update_option( self::OPTION_IMPORT_PUSH_STATE, $all, false );
 	}
 
@@ -259,6 +260,28 @@ class TransferProgress {
 		$inflight   = self::reconcile_receive_inflight( $migration_id );
 		$push_state = self::get_import_push_state( $migration_id );
 		$stale      = MigrationState::receive_is_stale( $migration_id, $receive, $last_at, $inflight, $push_state );
+		$stall_diag = MigrationState::receive_stall_diag( $receive, $last_at, $inflight, $push_state, $stale );
+
+		// #region agent log
+		$debug_log = dirname( TE_PLUGIN_DIR ) . '/debug-303160.log';
+		if ( $stale || ( is_array( $stall_diag ) && ! empty( $stall_diag['reasons'] ) ) ) {
+			$payload = wp_json_encode( array(
+				'sessionId'    => '303160',
+				'location'     => 'class-transfer-progress.php:receive_snapshot',
+				'message'      => 'receive_stall_snapshot',
+				'hypothesisId' => 'H1-H4',
+				'timestamp'    => (int) round( microtime( true ) * 1000 ),
+				'data'         => array(
+					'migration_id' => $migration_id,
+					'stale'        => $stale,
+					'stall_diag'   => $stall_diag,
+					'uploaded'     => $uploaded,
+					'expected'     => $expected,
+				),
+			) ) . "\n";
+			@file_put_contents( $debug_log, $payload, FILE_APPEND | LOCK_EX ); // phpcs:ignore
+		}
+		// #endregion
 
 		$bytes_done = (int) $receive['bytes_done'];
 		if ( ! empty( $inflight['bytes_done'] ) && $bytes_done < (int) $inflight['bytes_done'] ) {
@@ -289,7 +312,8 @@ class TransferProgress {
 			'inflight'            => $inflight,
 			'push_state'          => $push_state,
 			'stale'               => $stale,
-			'stale_message'       => self::stale_message( $stale, $push_state, $reconciling, $inflight ),
+			'stale_message'       => self::stale_message( $stale, $push_state, $reconciling, $inflight, $migration_id, $receive ),
+			'stall_diag'          => $stall_diag,
 			'reconciling'         => $reconciling,
 			'needs_manifest'      => ! empty( $upload['needs_manifest'] ),
 			'php_limits'          => Settings::php_upload_limits(),
@@ -729,7 +753,7 @@ class TransferProgress {
 	 * @param array|null $push_state Push state.
 	 * @return string
 	 */
-	private static function stale_message( $stale, $push_state = null, $reconciling = false, $inflight = null ) {
+	private static function stale_message( $stale, $push_state = null, $reconciling = false, $inflight = null, $migration_id = '', $receive = array() ) {
 		if ( $reconciling ) {
 			if ( $stale ) {
 				return __( 'Checksum verification stalled — server worker will retry.', 'the-exporter' );
@@ -746,7 +770,26 @@ class TransferProgress {
 				$push_state['error']
 			);
 		}
-		return __( 'No new files in 30s — transfer worker will retry. Optional: wp the-exporter transfer worker --migration-id=…', 'the-exporter' );
+		if ( is_array( $push_state ) && ! empty( $push_state['last_relay_code'] ) && (int) $push_state['last_relay_code'] >= 400 ) {
+			return sprintf(
+				/* translators: %d: HTTP status code */
+				__( 'Export could not update import status (HTTP %d). Keep the Send tab open on the export site.', 'the-exporter' ),
+				(int) $push_state['last_relay_code']
+			);
+		}
+		$expected = is_array( $receive ) ? (int) ( $receive['expected'] ?? 0 ) : 0;
+		$uploaded = is_array( $receive ) ? (int) ( $receive['uploaded'] ?? 0 ) : 0;
+		if ( $expected > 0 && 0 === $uploaded ) {
+			return __( 'Waiting for export site to send the first file — keep the Send tab open on the export site.', 'the-exporter' );
+		}
+		if ( '' !== $migration_id ) {
+			return sprintf(
+				/* translators: %s: migration UUID */
+				__( 'No new files in 30s. On the export site, keep Send open or run: wp the-exporter transfer worker --migration-id=%s', 'the-exporter' ),
+				$migration_id
+			);
+		}
+		return __( 'No new files in 30s. On the export site, keep Send open or run: wp the-exporter transfer worker --migration-id=…', 'the-exporter' );
 	}
 
 

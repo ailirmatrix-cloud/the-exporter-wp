@@ -161,13 +161,26 @@ class RemotePusher {
 		$index = isset( $meta['sent_index'] ) ? (int) $meta['sent_index'] : 0;
 		$index = max( $index, (int) ( $step['completed_chunks'] ?? 0 ) );
 
+		$meta['max_chunks_per_call'] = self::is_worker_driven() ? 8 : 4;
+		$index = self::advance_past_received_on_import( $job['migration_id'], $index, $queue, $meta, $step, $job_id );
+
 		if ( $index >= count( $queue ) ) {
-			JobRepository::update_step( (int) $step['id'], array(
-				'status'           => JobRepository::STATUS_COMPLETED,
-				'completed_chunks' => count( $queue ),
-			) );
-			JobRepository::update_job_status( $job_id, JobRepository::STATUS_COMPLETED );
-			return array( 'success' => true, 'done' => true, 'sent' => count( $queue ) );
+			if ( ! self::import_uploads_complete( $job['migration_id'], count( $queue ) ) ) {
+				self::maybe_reopen_incomplete_push( $job['migration_id'], $queue );
+				$step = JobRepository::get_step( $job_id, self::STEP_COMPONENT );
+				$meta = $step && is_array( $step['meta'] ) ? $step['meta'] : $meta;
+				$index = isset( $meta['sent_index'] ) ? (int) $meta['sent_index'] : $index;
+				if ( $index >= count( $queue ) ) {
+					return array( 'success' => true, 'done' => false, 'sent' => $index, 'total' => count( $queue ), 'waiting_import' => true );
+				}
+			} else {
+				JobRepository::update_step( (int) $step['id'], array(
+					'status'           => JobRepository::STATUS_COMPLETED,
+					'completed_chunks' => count( $queue ),
+				) );
+				JobRepository::update_job_status( $job_id, JobRepository::STATUS_COMPLETED );
+				return array( 'success' => true, 'done' => true, 'sent' => count( $queue ) );
+			}
 		}
 
 		$file_entry = $queue[ $index ];
@@ -234,6 +247,19 @@ class RemotePusher {
 			);
 		}
 
+		if ( ! self::import_uploads_complete( $job['migration_id'], count( $queue ) ) ) {
+			self::maybe_reopen_incomplete_push( $job['migration_id'], $queue );
+			self::relay_push_state( $job['migration_id'], array( 'active' => true, 'sent' => $index, 'done' => false ) );
+			TransferWorker::ensure_running( $job['migration_id'] );
+			return array(
+				'success' => true,
+				'done'    => false,
+				'sent'    => $index,
+				'total'   => count( $queue ),
+				'waiting_import' => true,
+			);
+		}
+
 		JobRepository::update_step( (int) $step['id'], array( 'status' => JobRepository::STATUS_COMPLETED ) );
 		JobRepository::update_job_status( $job_id, JobRepository::STATUS_COMPLETED );
 		self::touch_heartbeat( $job['migration_id'], null, $index, 'done' );
@@ -297,10 +323,7 @@ class RemotePusher {
 			$job = JobRepository::get_job_by_migration( $migration_id, 'push' );
 		}
 
-		self::$reconcile_tick_counter++;
-		if ( 1 === self::$reconcile_tick_counter % 10 ) {
-			self::reconcile_sent_index( $migration_id );
-		}
+		self::reconcile_sent_index( $migration_id );
 
 		$started = microtime( true );
 		$bytes   = 0;
@@ -690,6 +713,8 @@ class RemotePusher {
 			: Settings::effective_peer_chunk_size();
 		$part_total           = (int) ceil( $size / max( 1, $chunk_size ) );
 		$part_index           = (int) floor( $offset / max( 1, $chunk_size ) );
+		$max_chunks           = isset( $meta['max_chunks_per_call'] ) ? max( 1, (int) $meta['max_chunks_per_call'] ) : 1;
+		$chunks_sent          = 0;
 
 		while ( $offset < $size ) {
 			$chunk_len = (int) min( $chunk_size, $size - $offset );
@@ -737,7 +762,7 @@ class RemotePusher {
 				CURLOPT_POST           => true,
 				CURLOPT_POSTFIELDS     => $post,
 				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_TIMEOUT        => 300,
+				CURLOPT_TIMEOUT        => 90,
 				CURLOPT_HTTPHEADER     => array(
 					'X-TE-Token: ' . $token,
 					'Accept: application/json',
@@ -808,6 +833,10 @@ class RemotePusher {
 			$meta['chunk_offset'] = $offset;
 
 			if ( ! $is_final ) {
+				$chunks_sent++;
+				if ( $chunks_sent < $max_chunks ) {
+					continue;
+				}
 				fclose( $handle );
 				$meta['chunk_path'] = $rel_path;
 				return array(
@@ -1155,25 +1184,135 @@ class RemotePusher {
 			return;
 		}
 
-		$endpoint = trailingslashit( $remote_url ) . 'wp-json/the-exporter/v1/transfer/push-state/' . rawurlencode( $migration_id );
-		if ( ! function_exists( 'curl_init' ) ) {
-			return;
+		$relay_log = get_option( 'te_transfer_relay_log', array() );
+		if ( ! is_array( $relay_log ) ) {
+			$relay_log = array();
+		}
+		if ( ! empty( $relay_log[ $migration_id ] ) && is_array( $relay_log[ $migration_id ] ) ) {
+			$state = array_merge( $relay_log[ $migration_id ], $state );
 		}
 
-		$ch = curl_init( $endpoint );
-		curl_setopt_array( $ch, array(
-			CURLOPT_POST           => true,
-			CURLOPT_POSTFIELDS     => wp_json_encode( $state ),
-			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_TIMEOUT        => 5,
-			CURLOPT_HTTPHEADER     => array(
-				'X-TE-Token: ' . $token,
-				'Content-Type: application/json',
-				'Accept: application/json',
-			),
-		) );
-		curl_exec( $ch );
-		curl_close( $ch );
+		$endpoint = trailingslashit( $remote_url ) . 'wp-json/the-exporter/v1/transfer/push-state/' . rawurlencode( $migration_id );
+		$headers  = array(
+			'X-TE-Token'   => $token,
+			'Content-Type' => 'application/json',
+			'Accept'       => 'application/json',
+		);
+		$body_json = wp_json_encode( $state );
+		$code      = 0;
+		$err       = '';
+
+		$response = wp_remote_post(
+			$endpoint,
+			array(
+				'timeout'     => 8,
+				'headers'     => $headers,
+				'body'        => $body_json,
+				'redirection' => 5,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$err = $response->get_error_message();
+		} else {
+			$code = (int) wp_remote_retrieve_response_code( $response );
+			if ( $code < 200 || $code >= 300 ) {
+				$err = 'HTTP ' . $code;
+			}
+		}
+
+		if ( ( $code < 200 || $code >= 300 ) && function_exists( 'curl_init' ) ) {
+			$ch = curl_init( $endpoint );
+			$curl_opts = array(
+				CURLOPT_POST           => true,
+				CURLOPT_POSTFIELDS     => $body_json,
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_TIMEOUT        => 8,
+				CURLOPT_FOLLOWLOCATION => true,
+				CURLOPT_HTTPHEADER     => array(
+					'X-TE-Token: ' . $token,
+					'Content-Type: application/json',
+					'Accept: application/json',
+				),
+			);
+			if ( defined( 'CURLOPT_POSTREDIR' ) && defined( 'CURL_REDIR_POST_ALL' ) ) {
+				$curl_opts[ CURLOPT_POSTREDIR ] = CURL_REDIR_POST_ALL;
+			}
+			curl_setopt_array( $ch, $curl_opts );
+			$curl_body = curl_exec( $ch );
+			$code      = (int) curl_getinfo( $ch, CURLINFO_HTTP_CODE );
+			$curl_err  = curl_error( $ch );
+			curl_close( $ch );
+			if ( false === $curl_body ) {
+				$err = $curl_err ?: 'curl failed';
+			} elseif ( $code < 200 || $code >= 300 ) {
+				$err = 'HTTP ' . $code;
+			} else {
+				$err = '';
+			}
+		}
+
+		$relay_log[ $migration_id ] = array(
+			'last_relay_at'    => gmdate( 'c' ),
+			'last_relay_code'  => $code,
+			'last_relay_error' => $err,
+		);
+		update_option( 'te_transfer_relay_log', $relay_log, false );
+	}
+
+	/**
+	 * Whether a push error looks transient (timeouts, gateway errors).
+	 *
+	 * @param string $error Error message.
+	 * @return bool
+	 */
+	public static function is_transient_push_error( $error ) {
+		$error = strtolower( (string) $error );
+		if ( '' === $error ) {
+			return false;
+		}
+		$needles = array(
+			'timeout',
+			'timed out',
+			'502',
+			'503',
+			'504',
+			'connection reset',
+			'connection refused',
+			'could not resolve',
+			'empty reply',
+			'chunk transfer failed',
+			'remote rejected',
+			'curl failed',
+		);
+		foreach ( $needles as $needle ) {
+			if ( false !== strpos( $error, $needle ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Resume a failed push job when the last error looks transient.
+	 *
+	 * @param string $migration_id Migration ID.
+	 * @return bool Whether a job was resumed.
+	 */
+	public static function maybe_resume_failed_push( $migration_id ) {
+		$job = JobRepository::get_job_by_migration( $migration_id, 'push' );
+		if ( ! $job || JobRepository::STATUS_FAILED !== $job['status'] ) {
+			return false;
+		}
+		$step = JobRepository::get_step( (int) $job['id'], self::STEP_COMPONENT );
+		$meta = $step && is_array( $step['meta'] ) ? $step['meta'] : array();
+		$error = isset( $meta['last_error'] ) ? (string) $meta['last_error'] : '';
+		if ( ! self::is_transient_push_error( $error ) ) {
+			return false;
+		}
+		self::resume_push_job( $job );
+		TransferWorker::ensure_running( $migration_id );
+		return true;
 	}
 
 	/**
@@ -1220,14 +1359,32 @@ class RemotePusher {
 			return;
 		}
 
-		$received = self::fetch_import_received_paths( $migration_id );
-		if ( empty( $received ) ) {
+		$received = self::fetch_import_progress( $migration_id );
+		$paths    = $received['paths'] ?? array();
+		// #region agent log
+		$debug_log = dirname( TE_PLUGIN_DIR ) . '/debug-303160.log';
+		@file_put_contents( $debug_log, wp_json_encode( array(
+			'sessionId'    => '303160',
+			'location'     => 'class-remote-pusher.php:reconcile_sent_index',
+			'message'      => 'reconcile_paths',
+			'hypothesisId' => 'H6-H8',
+			'timestamp'    => (int) round( microtime( true ) * 1000 ),
+			'data'         => array(
+				'migration_id'   => $migration_id,
+				'received_count' => count( $paths ),
+				'uploaded'       => (int) ( $received['uploaded'] ?? 0 ),
+				'expected'       => (int) ( $received['expected'] ?? 0 ),
+				'job_status'     => $job['status'] ?? '',
+			),
+		) ) . "\n", FILE_APPEND | LOCK_EX ); // phpcs:ignore
+		// #endregion
+		if ( empty( $paths ) && empty( $received['uploaded'] ) ) {
 			return;
 		}
 
 		$queue  = self::resolve_queue( $migration_id, is_array( $step['meta'] ) ? $step['meta'] : array() );
 		$sent   = 0;
-		$lookup = array_flip( $received );
+		$lookup = array_flip( $paths );
 		foreach ( $queue as $i => $entry ) {
 			if ( ! isset( $lookup[ $entry['path'] ] ) ) {
 				break;
@@ -1247,9 +1404,23 @@ class RemotePusher {
 				'status'           => JobRepository::STATUS_RUNNING,
 			) );
 			JobRepository::update_job_status( (int) $job['id'], JobRepository::STATUS_RUNNING );
+		} elseif ( $sent < $current && $sent > 0 ) {
+			$meta['sent_index'] = $sent;
+			JobRepository::update_step( (int) $step['id'], array(
+				'completed_chunks' => $sent,
+				'total_chunks'     => $queue_total,
+				'meta'             => $meta,
+				'status'           => JobRepository::STATUS_RUNNING,
+			) );
+			JobRepository::update_job_status( (int) $job['id'], JobRepository::STATUS_RUNNING );
 		}
 
-		if ( $queue_total > 0 && $sent >= $queue_total && JobRepository::STATUS_COMPLETED !== $job['status'] ) {
+		if ( JobRepository::STATUS_COMPLETED === $job['status'] && ! self::import_uploads_complete( $migration_id, $queue_total ) ) {
+			self::maybe_reopen_incomplete_push( $migration_id, $queue );
+			return;
+		}
+
+		if ( $queue_total > 0 && $sent >= $queue_total && self::import_uploads_complete( $migration_id, $queue_total ) && JobRepository::STATUS_COMPLETED !== $job['status'] ) {
 			$meta['sent_index'] = $queue_total;
 			JobRepository::update_step( (int) $step['id'], array(
 				'status'           => JobRepository::STATUS_COMPLETED,
@@ -1263,7 +1434,223 @@ class RemotePusher {
 				'done'   => true,
 				'sent'   => $queue_total,
 			) );
+		} elseif ( $queue_total > 0 && $sent < $queue_total && JobRepository::STATUS_COMPLETED === $job['status'] ) {
+			self::maybe_reopen_incomplete_push( $migration_id, $queue );
 		}
+	}
+
+	/**
+	 * Skip queue entries already present on the import site (no HTTP upload).
+	 *
+	 * @param string $migration_id Migration ID.
+	 * @param int    $index        Current queue index.
+	 * @param array  $queue        File queue.
+	 * @param array  $meta         Step meta (by ref).
+	 * @param array  $step         Step row.
+	 * @param int    $job_id       Job ID.
+	 * @return int Updated index.
+	 */
+	private static function advance_past_received_on_import( $migration_id, $index, array $queue, array &$meta, array $step, $job_id ) {
+		$max_skip = self::is_worker_driven() ? 40 : 20;
+		$progress = self::fetch_import_progress( $migration_id );
+		$lookup   = array_flip( $progress['paths'] ?? array() );
+		if ( empty( $lookup ) ) {
+			return $index;
+		}
+
+		$skipped = 0;
+		while ( $index < count( $queue ) && $skipped < $max_skip ) {
+			if ( ! isset( $lookup[ $queue[ $index ]['path'] ] ) ) {
+				break;
+			}
+			$index++;
+			$skipped++;
+		}
+
+		if ( $skipped > 0 ) {
+			$meta['sent_index'] = $index;
+			JobRepository::update_step( (int) $step['id'], array(
+				'completed_chunks' => $index,
+				'total_chunks'     => count( $queue ),
+				'meta'             => $meta,
+				'status'           => JobRepository::STATUS_RUNNING,
+			) );
+			self::relay_push_state( $migration_id, array( 'active' => true, 'sent' => $index ) );
+			// #region agent log
+			$debug_log = dirname( TE_PLUGIN_DIR ) . '/debug-303160.log';
+			@file_put_contents( $debug_log, wp_json_encode( array(
+				'sessionId'    => '303160',
+				'location'     => 'class-remote-pusher.php:advance_past_received',
+				'message'      => 'fast_skip',
+				'hypothesisId' => 'H9',
+				'timestamp'    => (int) round( microtime( true ) * 1000 ),
+				'data'         => array(
+					'migration_id' => $migration_id,
+					'skipped'      => $skipped,
+					'new_index'    => $index,
+				),
+			) ) . "\n", FILE_APPEND | LOCK_EX ); // phpcs:ignore
+			// #endregion
+		}
+
+		return $index;
+	}
+
+	/**
+	 * Whether the import site reports all expected files received.
+	 *
+	 * @param string $migration_id Migration ID.
+	 * @param int    $queue_total  Push queue size.
+	 * @return bool
+	 */
+	private static function import_uploads_complete( $migration_id, $queue_total = 0 ) {
+		$progress = self::fetch_import_progress( $migration_id );
+		$expected = (int) ( $progress['expected'] ?? 0 );
+		$uploaded = (int) ( $progress['uploaded'] ?? 0 );
+		if ( $expected > 0 ) {
+			return $uploaded >= $expected;
+		}
+		if ( $queue_total > 0 ) {
+			$paths = $progress['paths'] ?? array();
+			return count( $paths ) >= $queue_total;
+		}
+		return false;
+	}
+
+	/**
+	 * Re-open a prematurely completed push job at the first missing file.
+	 *
+	 * @param string $migration_id Migration ID.
+	 * @param array  $queue        File queue.
+	 */
+	private static function maybe_reopen_incomplete_push( $migration_id, array $queue ) {
+		if ( self::import_uploads_complete( $migration_id, count( $queue ) ) ) {
+			return;
+		}
+
+		$progress = self::fetch_import_progress( $migration_id );
+		$lookup   = array_flip( $progress['paths'] ?? array() );
+		$new_index = count( $queue );
+		foreach ( $queue as $i => $entry ) {
+			if ( ! isset( $lookup[ $entry['path'] ] ) ) {
+				$new_index = $i;
+				break;
+			}
+		}
+		if ( $new_index >= count( $queue ) ) {
+			return;
+		}
+
+		$job = JobRepository::get_job_by_migration( $migration_id, 'push' );
+		if ( ! $job ) {
+			return;
+		}
+		$step = JobRepository::get_step( (int) $job['id'], self::STEP_COMPONENT );
+		if ( ! $step ) {
+			return;
+		}
+
+		$meta = is_array( $step['meta'] ) ? $step['meta'] : array();
+		unset( $meta['chunk_path'], $meta['chunk_offset'], $meta['last_error'] );
+		$meta['sent_index'] = $new_index;
+
+		JobRepository::update_step( (int) $step['id'], array(
+			'status'           => JobRepository::STATUS_RUNNING,
+			'completed_chunks' => $new_index,
+			'total_chunks'     => count( $queue ),
+			'meta'             => $meta,
+		) );
+		JobRepository::update_job_status( (int) $job['id'], JobRepository::STATUS_RUNNING );
+		self::relay_push_state( $migration_id, array(
+			'active' => true,
+			'done'   => false,
+			'sent'   => $new_index,
+		) );
+		TransferWorker::ensure_running( $migration_id );
+
+		// #region agent log
+		$debug_log = dirname( TE_PLUGIN_DIR ) . '/debug-303160.log';
+		@file_put_contents( $debug_log, wp_json_encode( array(
+			'sessionId'    => '303160',
+			'location'     => 'class-remote-pusher.php:maybe_reopen_incomplete_push',
+			'message'      => 'reopen_push',
+			'hypothesisId' => 'H6-H8',
+			'timestamp'    => (int) round( microtime( true ) * 1000 ),
+			'data'         => array(
+				'migration_id' => $migration_id,
+				'new_index'    => $new_index,
+				'uploaded'     => (int) ( $progress['uploaded'] ?? 0 ),
+				'expected'     => (int) ( $progress['expected'] ?? 0 ),
+			),
+		) ) . "\n", FILE_APPEND | LOCK_EX ); // phpcs:ignore
+		// #endregion
+	}
+
+	/**
+	 * Fetch import receive progress from the paired site.
+	 *
+	 * @param string $migration_id Migration ID.
+	 * @return array{paths:array,uploaded:int,expected:int}
+	 */
+	private static function fetch_import_progress( $migration_id ) {
+		$remote_url = self::get_push_url();
+		$token      = Settings::get( 'remote_pairing_token', '' );
+		if ( ! $remote_url || ! $token ) {
+			return array( 'paths' => array(), 'uploaded' => 0, 'expected' => 0 );
+		}
+
+		$endpoint = trailingslashit( $remote_url ) . 'wp-json/the-exporter/v1/transfer/import-progress/' . rawurlencode( $migration_id );
+		$body     = '';
+		$code     = 0;
+
+		$response = wp_remote_get(
+			$endpoint,
+			array(
+				'timeout'     => 15,
+				'headers'     => array(
+					'X-TE-Token' => $token,
+					'Accept'     => 'application/json',
+				),
+				'redirection' => 5,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$body = '';
+		} else {
+			$code = (int) wp_remote_retrieve_response_code( $response );
+			$body = (string) wp_remote_retrieve_body( $response );
+		}
+
+		if ( ( $code < 200 || $code >= 300 || '' === $body ) && function_exists( 'curl_init' ) ) {
+			$ch = curl_init( $endpoint );
+			curl_setopt_array( $ch, array(
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_TIMEOUT        => 15,
+				CURLOPT_FOLLOWLOCATION => true,
+				CURLOPT_HTTPHEADER     => array(
+					'X-TE-Token: ' . $token,
+					'Accept: application/json',
+				),
+			) );
+			$body = curl_exec( $ch );
+			curl_close( $ch );
+		}
+
+		if ( false === $body || '' === $body ) {
+			return array( 'paths' => array(), 'uploaded' => 0, 'expected' => 0 );
+		}
+
+		$data = json_decode( $body, true );
+		if ( ! is_array( $data ) ) {
+			return array( 'paths' => array(), 'uploaded' => 0, 'expected' => 0 );
+		}
+
+		return array(
+			'paths'    => ! empty( $data['received_paths'] ) && is_array( $data['received_paths'] ) ? $data['received_paths'] : array(),
+			'uploaded' => (int) ( $data['uploaded'] ?? 0 ),
+			'expected' => (int) ( $data['expected'] ?? 0 ),
+		);
 	}
 
 	/**
@@ -1271,29 +1658,8 @@ class RemotePusher {
 	 * @return array
 	 */
 	private static function fetch_import_received_paths( $migration_id ) {
-		$remote_url = self::get_push_url();
-		$token      = Settings::get( 'remote_pairing_token', '' );
-		if ( ! $remote_url || ! $token || ! function_exists( 'curl_init' ) ) {
-			return array();
-		}
-
-		$endpoint = trailingslashit( $remote_url ) . 'wp-json/the-exporter/v1/transfer/import-progress/' . rawurlencode( $migration_id );
-		$ch       = curl_init( $endpoint );
-		curl_setopt_array( $ch, array(
-			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_TIMEOUT        => 15,
-			CURLOPT_HTTPHEADER     => array(
-				'X-TE-Token: ' . $token,
-				'Accept: application/json',
-			),
-		) );
-		$body = curl_exec( $ch );
-		curl_close( $ch );
-		if ( false === $body || '' === $body ) {
-			return array();
-		}
-		$data = json_decode( $body, true );
-		return is_array( $data ) && ! empty( $data['received_paths'] ) ? $data['received_paths'] : array();
+		$progress = self::fetch_import_progress( $migration_id );
+		return $progress['paths'];
 	}
 
 	/**

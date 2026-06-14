@@ -3,7 +3,7 @@
  * Plugin Name:       The Exporter
  * Plugin URI:        https://github.com/ailirmatrix-cloud/the-exporter-wp
  * Description:       Verification-first migration for very large WordPress sites. Exports chunked, checksum-verified packages for manual transfer.
- * Version:           2.12.1
+ * Version:           2.13.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            The Exporter
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'TE_VERSION', '2.12.1' );
+define( 'TE_VERSION', '2.13.2' );
 define( 'TE_PLUGIN_FILE', __FILE__ );
 define( 'TE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'TE_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

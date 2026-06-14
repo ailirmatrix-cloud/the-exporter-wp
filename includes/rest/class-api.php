@@ -1137,8 +1137,10 @@ class Api {
 		$nudged = false;
 		$result = array( 'success' => true, 'nudge' => false );
 
-		$budget_sec   = Settings::is_localhost_peer() ? 25 : 15;
+		$budget_sec   = Settings::transfer_drive_seconds();
 		$budget_bytes = TransferWorker::budget_bytes();
+
+		RemotePusher::maybe_resume_failed_push( $id );
 
 		if ( TransferWorker::try_acquire( $id ) ) {
 			$nudged = true;

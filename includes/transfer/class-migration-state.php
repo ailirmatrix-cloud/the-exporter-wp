@@ -189,22 +189,98 @@ class MigrationState {
 				}
 			}
 		}
-		if ( ! empty( $push_state['active'] ) || ! empty( $push_state['worker_active'] ) ) {
-			return false;
-		}
-		if ( ! empty( $push_state['worker_last_at'] ) ) {
-			$ts = strtotime( $push_state['worker_last_at'] );
-			if ( $ts && ( time() - $ts ) <= 45 ) {
-				return false;
-			}
-		}
+
 		if ( ! $last_at ) {
+			if ( $expected > 0 && 0 === $uploaded ) {
+				if ( ! empty( $push_state['worker_last_at'] ) ) {
+					$ts = strtotime( $push_state['worker_last_at'] );
+					if ( $ts && ( time() - $ts ) <= 45 ) {
+						return false;
+					}
+				}
+				return true;
+			}
 			return false;
 		}
+
 		$ts = strtotime( $last_at );
 		if ( ! $ts ) {
 			return false;
 		}
+
 		return ( time() - $ts ) > TransferProgress::stale_seconds();
+	}
+
+	/**
+	 * Structured stall diagnosis for receive UI / debug.
+	 *
+	 * @param array       $receive    Receive state.
+	 * @param string|null $last_at    Last completed file timestamp.
+	 * @param array|null  $inflight   In-flight chunk.
+	 * @param array|null  $push_state Relayed export push state.
+	 * @param bool        $stale      Whether receive is stale.
+	 * @return array|null
+	 */
+	public static function receive_stall_diag( array $receive, $last_at, $inflight, $push_state, $stale ) {
+		if ( ! $stale ) {
+			return null;
+		}
+		$reasons   = array();
+		$last_age  = null;
+		if ( $last_at ) {
+			$ts = strtotime( $last_at );
+			if ( $ts ) {
+				$last_age = time() - $ts;
+				if ( $last_age > TransferProgress::stale_seconds() ) {
+					$reasons[] = 'no_completed_file_' . $last_age . 's';
+				}
+			}
+		}
+		if ( ! is_array( $push_state ) || empty( $push_state ) ) {
+			$reasons[] = 'no_export_push_state';
+		} else {
+			if ( ! empty( $push_state['active'] ) || ! empty( $push_state['worker_active'] ) ) {
+				$reasons[] = 'export_reports_active_but_no_progress';
+			} elseif ( empty( $push_state['active'] ) && empty( $push_state['worker_active'] ) ) {
+				$reasons[] = 'export_push_idle';
+			}
+			if ( ! empty( $push_state['error'] ) ) {
+				$reasons[] = 'export_error';
+			}
+			if ( ! empty( $push_state['worker_last_at'] ) ) {
+				$hb_ts = strtotime( $push_state['worker_last_at'] );
+				if ( $hb_ts && ( time() - $hb_ts ) > 45 ) {
+					$reasons[] = 'export_heartbeat_stale_' . ( time() - $hb_ts ) . 's';
+				}
+			} else {
+				$reasons[] = 'export_heartbeat_missing';
+			}
+			if ( ! empty( $push_state['last_relay_code'] ) && (int) $push_state['last_relay_code'] >= 400 ) {
+				$reasons[] = 'relay_http_' . (int) $push_state['last_relay_code'];
+			}
+		}
+		if ( is_array( $inflight ) && ! empty( $inflight['path'] ) ) {
+			$reasons[] = 'partial_chunk_on_disk';
+		}
+		$likely = 'export_send_tab_not_driving';
+		if ( in_array( 'export_reports_active_but_no_progress', $reasons, true ) ) {
+			$likely = 'export_stuck_on_current_file';
+		} elseif ( in_array( 'export_error', $reasons, true ) ) {
+			$likely = 'export_push_failed';
+		} elseif ( in_array( 'no_export_push_state', $reasons, true ) || in_array( 'export_heartbeat_missing', $reasons, true ) ) {
+			$likely = 'export_send_tab_closed_or_never_started';
+		} elseif ( in_array( 'partial_chunk_on_disk', $reasons, true ) ) {
+			$likely = 'stuck_mid_chunk';
+		}
+
+		return array(
+			'likely'              => $likely,
+			'reasons'             => $reasons,
+			'last_received_age_s' => $last_age,
+			'push_sent'           => is_array( $push_state ) && isset( $push_state['sent'] ) ? (int) $push_state['sent'] : null,
+			'push_active'         => is_array( $push_state ) && ! empty( $push_state['active'] ),
+			'worker_last_at'      => is_array( $push_state ) && ! empty( $push_state['worker_last_at'] ) ? $push_state['worker_last_at'] : null,
+			'inflight_path'       => is_array( $inflight ) && ! empty( $inflight['path'] ) ? $inflight['path'] : null,
+		);
 	}
 }
