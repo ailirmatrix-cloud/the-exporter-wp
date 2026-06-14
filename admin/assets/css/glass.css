@@ -1,0 +1,328 @@
+/* Glass components */
+.te-app .te-glass-panel,
+.te-app .te-glass-card {
+	background: var(--te-bg-elevated);
+	backdrop-filter: blur(var(--te-blur));
+	-webkit-backdrop-filter: blur(var(--te-blur));
+	border: 1px solid var(--te-border);
+	border-radius: var(--te-radius-md);
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.te-app .te-glass-card__header {
+	padding: 16px 20px 0;
+}
+
+.te-app .te-glass-card__title {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--te-text-primary);
+}
+
+.te-app .te-glass-card__body {
+	padding: 16px 20px 20px;
+}
+
+/* Buttons */
+.te-app .te-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 18px;
+	border-radius: var(--te-radius-sm);
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	border: 1px solid transparent;
+	transition: all var(--te-transition);
+	font-family: var(--te-font);
+}
+
+.te-app .te-btn:focus {
+	outline: 2px solid var(--te-accent);
+	outline-offset: 2px;
+}
+
+.te-app .te-btn--primary {
+	background: linear-gradient(135deg, rgba(34, 211, 238, 0.25), rgba(167, 139, 250, 0.2));
+	border-color: rgba(34, 211, 238, 0.4);
+	color: var(--te-text-primary);
+}
+
+.te-app .te-btn--primary:hover:not(:disabled) {
+	box-shadow: var(--te-glow);
+	border-color: var(--te-accent);
+}
+
+.te-app .te-btn--secondary {
+	background: var(--te-bg-hover);
+	border-color: var(--te-border);
+	color: var(--te-text-primary);
+}
+
+.te-app .te-btn--ghost {
+	background: transparent;
+	border-color: var(--te-border);
+	color: var(--te-text-muted);
+}
+
+.te-app .te-btn--danger {
+	background: rgba(251, 113, 133, 0.15);
+	border-color: rgba(251, 113, 133, 0.4);
+	color: var(--te-danger);
+}
+
+.te-app .te-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+/* Badges */
+.te-app .te-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 500;
+	background: var(--te-bg-hover);
+	border: 1px solid var(--te-border);
+}
+
+.te-app .te-badge__dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--te-text-muted);
+}
+
+.te-app .te-badge--pending .te-badge__dot { background: var(--te-text-muted); }
+.te-app .te-badge--running .te-badge__dot {
+	background: var(--te-accent);
+	animation: te-pulse 1.5s ease infinite;
+}
+.te-app .te-badge--completed .te-badge__dot { background: var(--te-success); }
+.te-app .te-badge--failed .te-badge__dot { background: var(--te-danger); }
+.te-app .te-badge--warning .te-badge__dot { background: var(--te-warning); }
+
+@keyframes te-pulse {
+	0%, 100% { opacity: 1; transform: scale(1); }
+	50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.te-app .te-badge--running .te-badge__dot { animation: none; }
+}
+
+/* Inputs */
+.te-app .te-input,
+.te-app .te-textarea {
+	width: 100%;
+	padding: 10px 14px;
+	background: rgba(0, 0, 0, 0.25);
+	border: 1px solid var(--te-border);
+	border-radius: var(--te-radius-sm);
+	color: var(--te-text-primary);
+	font-family: var(--te-font);
+	font-size: 13px;
+	box-sizing: border-box;
+}
+
+.te-app .te-input:focus,
+.te-app .te-textarea:focus {
+	outline: 2px solid var(--te-accent);
+	outline-offset: 0;
+	border-color: var(--te-accent);
+}
+
+.te-app .te-mono,
+.te-app .te-input.te-mono,
+.te-app code.te-mono {
+	font-family: var(--te-mono);
+	font-size: 12px;
+}
+
+/* Stat tiles */
+.te-app .te-stat-tile {
+	padding: 16px;
+	text-align: center;
+	background: var(--te-bg-elevated);
+	border: 1px solid var(--te-border);
+	border-radius: var(--te-radius-md);
+	backdrop-filter: blur(var(--te-blur));
+}
+
+.te-app .te-stat-tile__value {
+	font-size: 20px;
+	font-weight: 700;
+	color: var(--te-accent);
+}
+
+.te-app .te-stat-tile__label {
+	font-size: 12px;
+	color: var(--te-text-muted);
+	margin-top: 4px;
+}
+
+/* Wizard */
+.te-app .te-wizard {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.te-app .te-wizard__step {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 14px;
+	background: var(--te-bg-elevated);
+	border: 1px solid var(--te-border);
+	border-radius: var(--te-radius-sm);
+	font-size: 12px;
+	color: var(--te-text-muted);
+}
+
+.te-app .te-wizard__step--active {
+	border-color: var(--te-accent);
+	color: var(--te-text-primary);
+	box-shadow: var(--te-glow);
+}
+
+.te-app .te-wizard__step--done {
+	border-color: var(--te-success);
+	color: var(--te-success);
+}
+
+.te-app .te-wizard__num {
+	width: 22px;
+	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: var(--te-bg-hover);
+	font-weight: 600;
+}
+
+/* Progress ring */
+.te-app .te-progress-ring {
+	width: 80px;
+	height: 80px;
+}
+
+.te-app .te-progress-ring__bg {
+	fill: none;
+	stroke: var(--te-border);
+	stroke-width: 6;
+}
+
+.te-app .te-progress-ring__fill {
+	fill: none;
+	stroke: url(#te-gradient);
+	stroke-width: 6;
+	stroke-linecap: round;
+	transform: rotate(-90deg);
+	transform-origin: 50% 50%;
+	stroke: var(--te-accent);
+}
+
+.te-app .te-progress-ring__text {
+	fill: var(--te-text-primary);
+	font-size: 14px;
+	text-anchor: middle;
+	font-weight: 600;
+}
+
+/* Modal */
+.te-app .te-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.te-app .te-modal[hidden] {
+	display: none;
+}
+
+.te-app .te-modal__overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.6);
+	backdrop-filter: blur(4px);
+}
+
+.te-app .te-modal__dialog {
+	position: relative;
+	max-width: 440px;
+	width: 90%;
+	padding: 24px;
+	z-index: 1;
+}
+
+.te-app .te-modal__title {
+	margin: 0 0 12px;
+	color: var(--te-text-primary);
+}
+
+.te-app .te-modal__message {
+	color: var(--te-text-muted);
+	font-size: 14px;
+}
+
+.te-app .te-modal__actions {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	margin-top: 16px;
+}
+
+/* Table */
+.te-app .te-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.te-app .te-table th,
+.te-app .te-table td {
+	padding: 10px 12px;
+	text-align: left;
+	border-bottom: 1px solid var(--te-border);
+	color: var(--te-text-primary);
+}
+
+.te-app .te-table th {
+	color: var(--te-text-muted);
+	font-weight: 500;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+/* Log viewer */
+.te-app .te-log-viewer {
+	max-height: 400px;
+	overflow-y: auto;
+	font-family: var(--te-mono);
+	font-size: 12px;
+	background: rgba(0, 0, 0, 0.3);
+	border-radius: var(--te-radius-sm);
+	padding: 12px;
+}
+
+.te-app .te-log-line {
+	padding: 4px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.te-app .te-log-line--success { color: var(--te-success); }
+.te-app .te-log-line--error { color: var(--te-danger); }
+.te-app .te-log-line--warning { color: var(--te-warning); }
+.te-app .te-log-ts { color: var(--te-text-muted); }
+.te-app .te-log-action { color: var(--te-accent); }

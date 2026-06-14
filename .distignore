@@ -1,0 +1,17 @@
+/.git
+/.github
+/.cursor
+/node_modules
+/src
+/tests
+package.json
+package-lock.json
+.editorconfig
+.eslintrc.js
+.eslintrc.cjs
+.prettierrc
+.prettierrc.js
+*.log
+*.map
+.DS_Store
+Thumbs.db

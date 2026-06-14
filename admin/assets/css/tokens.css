@@ -1,0 +1,22 @@
+/* Design tokens — scoped to .te-app */
+.te-app {
+	--te-bg-base: #0a0e17;
+	--te-bg-elevated: rgba(255, 255, 255, 0.06);
+	--te-bg-hover: rgba(255, 255, 255, 0.10);
+	--te-blur: 16px;
+	--te-border: rgba(255, 255, 255, 0.12);
+	--te-radius-sm: 8px;
+	--te-radius-md: 12px;
+	--te-radius-lg: 16px;
+	--te-text-primary: #f1f5f9;
+	--te-text-muted: #94a3b8;
+	--te-accent: #22d3ee;
+	--te-accent-secondary: #a78bfa;
+	--te-success: #34d399;
+	--te-warning: #fbbf24;
+	--te-danger: #fb7185;
+	--te-glow: 0 0 24px rgba(34, 211, 238, 0.15);
+	--te-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--te-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+	--te-transition: 150ms ease;
+}

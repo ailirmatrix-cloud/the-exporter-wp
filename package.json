@@ -1,0 +1,15 @@
+{
+  "name": "the-exporter",
+  "version": "2.4.1",
+  "description": "Verification-first WordPress migration for very large sites",
+  "private": true,
+  "scripts": {
+    "build": "wp-scripts build",
+    "plugin-zip": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/package-zip.ps1",
+    "start": "wp-scripts start",
+    "dev": "wp-scripts start"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^30.7.0"
+  }
+}

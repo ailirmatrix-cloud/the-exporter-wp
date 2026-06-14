@@ -1,0 +1,489 @@
+/* Migrate wizard — high-contrast readability on dark glass UI */
+
+.te-app .te-migrate {
+	max-width: 720px;
+	margin: 0 auto;
+	color: var(--te-text-primary, #f1f5f9);
+	font-size: 15px;
+	line-height: 1.55;
+}
+
+.te-app .te-migrate__intro {
+	color: #cbd5e1;
+	margin-bottom: 1.5rem;
+	line-height: 1.6;
+	font-size: 15px;
+}
+
+/* WordPress @wordpress/components overrides */
+.te-app .te-migrate .components-card {
+	background: rgba(255, 255, 255, 0.09);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: var(--te-radius-md, 12px);
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+	color: var(--te-text-primary, #f1f5f9);
+}
+
+.te-app .te-migrate .components-card__header {
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	padding: 1.25rem 1.5rem 0.75rem;
+}
+
+.te-app .te-migrate .components-card__header h2,
+.te-app .te-migrate .components-card-header h2 {
+	margin: 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: #ffffff;
+	letter-spacing: -0.01em;
+}
+
+.te-app .te-migrate .components-card__body,
+.te-app .te-migrate .components-card-body {
+	padding: 0.75rem 1.5rem 1.5rem;
+	color: #e2e8f0;
+}
+
+.te-app .te-migrate .components-base-control__label,
+.te-app .te-migrate .components-text-control label {
+	color: #e2e8f0;
+	font-size: 14px;
+	font-weight: 500;
+	margin-bottom: 6px;
+}
+
+.te-app .te-migrate .components-text-control__input,
+.te-app .te-migrate input[type="text"],
+.te-app .te-migrate input[type="url"] {
+	background: rgba(0, 0, 0, 0.35);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	border-radius: var(--te-radius-sm, 8px);
+	color: #ffffff;
+	font-size: 15px;
+	padding: 10px 12px;
+
+	&::placeholder {
+		color: #94a3b8;
+	}
+
+	&:focus {
+		border-color: var(--te-accent, #22d3ee);
+		box-shadow: 0 0 0 1px var(--te-accent, #22d3ee);
+		outline: none;
+	}
+}
+
+.te-app .te-migrate .components-button.is-primary {
+	background: linear-gradient(135deg, rgba(34, 211, 238, 0.35), rgba(167, 139, 250, 0.28));
+	border: 1px solid rgba(34, 211, 238, 0.55);
+	color: #ffffff;
+	font-weight: 600;
+	font-size: 14px;
+	padding: 10px 18px;
+	border-radius: var(--te-radius-sm, 8px);
+
+	&:hover:not(:disabled) {
+		background: linear-gradient(135deg, rgba(34, 211, 238, 0.45), rgba(167, 139, 250, 0.35));
+		color: #ffffff;
+	}
+}
+
+.te-app .te-migrate .components-button.is-secondary {
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	color: #f1f5f9;
+	font-weight: 500;
+
+	&:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.16);
+		color: #ffffff;
+	}
+}
+
+.te-app .te-migrate .components-notice {
+	background: rgba(34, 211, 238, 0.12);
+	border-left-color: var(--te-accent, #22d3ee);
+	color: #e2e8f0;
+
+	&.is-success {
+		background: rgba(52, 211, 153, 0.14);
+		border-left-color: var(--te-success, #34d399);
+		color: #d1fae5;
+	}
+
+	&.is-warning {
+		background: rgba(251, 191, 36, 0.14);
+		border-left-color: var(--te-warning, #fbbf24);
+		color: #fef3c7;
+	}
+
+	&.is-error {
+		background: rgba(251, 113, 133, 0.14);
+		border-left-color: var(--te-danger, #fb7185);
+		color: #ffe4e6;
+	}
+
+	code {
+		color: #ffffff;
+		background: rgba(0, 0, 0, 0.3);
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+}
+
+.te-app .te-migrate p {
+	color: #cbd5e1;
+	margin: 0.5rem 0;
+}
+
+.te-app .te-migrate code {
+	color: #ffffff;
+	background: rgba(0, 0, 0, 0.35);
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+.te-app .te-migrate__stepper {
+	display: flex;
+	gap: 0.5rem;
+	margin-bottom: 1.5rem;
+	flex-wrap: wrap;
+}
+
+.te-app .te-migrate__step {
+	flex: 1;
+	min-width: 100px;
+	padding: 0.6rem 0.85rem;
+	border-radius: var(--te-radius-sm, 8px);
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	font-size: 0.875rem;
+	font-weight: 500;
+	text-align: center;
+	color: #94a3b8;
+
+	&--active {
+		border-color: var(--te-accent, #22d3ee);
+		color: #ffffff;
+		background: rgba(34, 211, 238, 0.14);
+	}
+
+	&--done {
+		color: var(--te-success, #34d399);
+		border-color: rgba(52, 211, 153, 0.4);
+	}
+}
+
+.te-app .te-migrate__card {
+	padding: 0;
+}
+
+.te-app .te-migrate__actions {
+	display: flex;
+	gap: 0.75rem;
+	margin-top: 1.25rem;
+	flex-wrap: wrap;
+	align-items: center;
+}
+
+.te-app .te-migrate__status {
+	margin-top: 1rem;
+	padding: 0.85rem 1rem;
+	border-radius: var(--te-radius-sm, 8px);
+	font-size: 0.9375rem;
+	font-weight: 500;
+	line-height: 1.5;
+
+	&--info {
+		background: rgba(34, 211, 238, 0.14);
+		color: #a5f3fc;
+		border: 1px solid rgba(34, 211, 238, 0.25);
+	}
+
+	&--success {
+		background: rgba(52, 211, 153, 0.14);
+		color: #a7f3d0;
+		border: 1px solid rgba(52, 211, 153, 0.25);
+	}
+
+	&--error {
+		background: rgba(251, 113, 133, 0.14);
+		color: #fecdd3;
+		border: 1px solid rgba(251, 113, 133, 0.25);
+	}
+}
+
+.te-app .te-migrate__code {
+	display: block;
+	padding: 0.85rem 1rem;
+	margin: 0.75rem 0;
+	background: rgba(0, 0, 0, 0.4);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: var(--te-radius-sm, 8px);
+	font-family: var(--te-mono, ui-monospace, monospace);
+	font-size: 0.95rem;
+	color: #ffffff;
+	word-break: break-all;
+	user-select: all;
+}
+
+.te-app .te-migrate__progress-bar {
+	height: 8px;
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 4px;
+	overflow: hidden;
+	margin-top: 0.75rem;
+
+	&-fill {
+		height: 100%;
+		background: var(--te-accent, #22d3ee);
+		transition: width 0.3s ease;
+	}
+}
+
+.te-app .te-migrate__progress-pulse {
+	box-shadow: 0 0 12px var(--te-accent, #22d3ee);
+}
+
+.te-app .te-migrate__transfer-panel {
+	margin-top: 1rem;
+}
+
+.te-app .te-migrate__stats {
+	margin-top: 0.5rem;
+	font-size: 0.85rem;
+	color: rgba(255, 255, 255, 0.75);
+}
+
+.te-app .te-migrate__component-list {
+	margin-top: 1rem;
+}
+
+.te-app .te-migrate__component-list-title,
+.te-app .te-migrate__activity-feed-title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: rgba(255, 255, 255, 0.55);
+	margin-bottom: 0.5rem;
+}
+
+.te-app .te-migrate__component-row {
+	display: grid;
+	grid-template-columns: 1.25rem 1fr auto;
+	grid-template-rows: auto auto;
+	gap: 0.15rem 0.5rem;
+	align-items: center;
+	padding: 0.35rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+	&--active .te-migrate__component-label {
+		color: var(--te-accent, #22d3ee);
+	}
+
+	&--done .te-migrate__component-icon {
+		color: #4ade80;
+	}
+}
+
+.te-app .te-migrate__component-icon {
+	font-size: 0.9rem;
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.te-app .te-migrate__component-label {
+	font-size: 0.9rem;
+}
+
+.te-app .te-migrate__component-count {
+	font-size: 0.8rem;
+	color: rgba(255, 255, 255, 0.6);
+	font-variant-numeric: tabular-nums;
+}
+
+.te-app .te-migrate__component-bar {
+	grid-column: 2 / -1;
+	height: 3px;
+	background: rgba(255, 255, 255, 0.08);
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.te-app .te-migrate__component-bar-fill {
+	height: 100%;
+	background: rgba(34, 211, 238, 0.7);
+	transition: width 0.3s ease;
+}
+
+.te-app .te-migrate__activity-feed {
+	margin-top: 1rem;
+
+	&--pulse .te-migrate__activity-item:first-child {
+		animation: te-activity-in 0.4s ease;
+	}
+}
+
+.te-app .te-migrate__activity-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 10rem;
+	overflow-y: auto;
+}
+
+.te-app .te-migrate__activity-item {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem 0.5rem;
+	align-items: baseline;
+	padding: 0.3rem 0;
+	font-size: 0.8rem;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.te-app .te-migrate__activity-check {
+	color: #4ade80;
+	flex-shrink: 0;
+}
+
+.te-app .te-migrate__activity-path {
+	font-family: var(--te-mono, ui-monospace, monospace);
+	color: rgba(255, 255, 255, 0.9);
+	flex: 1;
+	min-width: 0;
+	word-break: break-all;
+}
+
+.te-app .te-migrate__activity-meta {
+	color: rgba(255, 255, 255, 0.5);
+	white-space: nowrap;
+}
+
+@keyframes te-activity-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.te-app .te-migrate__role-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+	margin-top: 1rem;
+
+	@media (max-width: 600px) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.te-app .te-migrate__toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin-bottom: 1rem;
+}
+
+.te-app .te-migrate__toolbar .te-migrate__stepper {
+	flex: 1;
+	margin-bottom: 0;
+}
+
+.te-app .te-migrate__change-role.components-button.is-link {
+	color: #a5f3fc;
+	text-decoration: underline;
+	padding: 0.25rem 0;
+
+	&:hover {
+		color: #ffffff;
+	}
+}
+
+.te-app .te-migrate__notice {
+	margin-bottom: 1rem;
+}
+
+.te-app .te-migrate__role-btn {
+	padding: 1.35rem 1.25rem;
+	position: relative;
+	z-index: 1;
+	pointer-events: auto;
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: var(--te-radius-md, 12px);
+	background: rgba(255, 255, 255, 0.08);
+	color: #ffffff;
+	transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+	font-family: inherit;
+	-webkit-appearance: none;
+	appearance: none;
+
+	&--pending {
+		border-color: var(--te-accent, #22d3ee);
+		background: rgba(34, 211, 238, 0.16);
+	}
+
+	&:hover:not(:disabled) {
+		border-color: var(--te-accent, #22d3ee);
+		background: rgba(34, 211, 238, 0.12);
+		box-shadow: 0 0 20px rgba(34, 211, 238, 0.12);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--te-accent, #22d3ee);
+		outline-offset: 2px;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	strong {
+		display: block;
+		margin-bottom: 0.4rem;
+		font-size: 1.05rem;
+		font-weight: 600;
+		color: #ffffff;
+	}
+
+	span {
+		font-size: 0.9rem;
+		color: #cbd5e1;
+		line-height: 1.45;
+	}
+}
+
+.te-app .te-migrate__role-spinner {
+	position: absolute;
+	top: 0.75rem;
+	right: 0.75rem;
+}
+
+.te-app .te-migrate .components-button.is-link {
+	color: #a5f3fc;
+}
+
+.te-layout--wizard .te-activity {
+	display: none;
+}
+
+.te-layout--wizard .te-main {
+	grid-column: 1 / -1;
+}
+
+/* Page heading on wizard */
+.te-layout--wizard .te-page-title {
+	color: #ffffff;
+	font-size: 1.5rem;
+	letter-spacing: -0.02em;
+}
